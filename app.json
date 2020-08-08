@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "HelloWorld",
-    "slug": "expo-helloworld",
+    "name": "face detector",
+    "slug": "face-detector",
     "platforms": ["ios", "android"],
     "version": "1.0.0",
     "orientation": "portrait",
