@@ -1,78 +1,115 @@
-import React, { Component } from 'react';
-import { StyleSheet, Text } from 'react-native';
-import * as THREE from 'three';
-import ExpoTHREE from 'expo-three'
-import { GLView } from 'expo-gl';
-import * as Permissions from 'expo-permissions';
-import * as ThreeAR from 'expo-three-ar';
+import React, { useState, useEffect, useRef } from 'react';
+import { Text, View, TouchableOpacity, SafeAreaView, Animated } from 'react-native';
+import { Camera } from 'expo-camera';
+import * as FaceDetector from 'expo-face-detector';
+// import Animated, { useCode } from 'react-native-reanimated';
 
 
-export default class App extends Component {
 
-  async componentDidMount() {
-    const { status } = await Permissions.askAsync(Permissions.CAMERA);
-    if (status !== 'granted') {
-      alert('camera permission required');
-    }
-    // Turn off extra warnings
-    // ExpoTHREE.THREE.suppressExpoWarnings(true);
+export default function App() {
+  const [hasPermission, setHasPermission] = useState(null);
+  const [type, setType] = useState(Camera.Constants.Type.back);
+  const transX = useRef(new Animated.Value(0)).current;
+  const transY = useRef(new Animated.Value(0)).current;
+
+  const [boxSize, setBoxSize] = useState({
+    height: 0,
+    width: 0
+  })
+  const [hasFaceInFrame, setHasFaceInFrame] = useState(false)
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await Camera.requestPermissionsAsync();
+      setHasPermission(status === 'granted');
+    })();
+  }, []);
+
+  if (hasPermission === null) {
+    return <View />;
+  }
+  if (hasPermission === false) {
+    return <Text>No access to camera</Text>;
   }
 
-  _onGLContextCreate = async (gl) => {
-    // const arSession = await this._glView.startARSessionAsync()
-    // new ExpoTHREE.AR.Camera
 
-    // Do graphics stuff here!
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(
-      75, gl.drawingBufferWidth / gl.drawingBufferHeight, 0.1, 1000);
-    const renderer = new ExpoTHREE.Renderer({ gl });
-    renderer.setSize(gl.drawingBufferWidth, gl.drawingBufferHeight);
 
-    scene.background = new ThreeAR.BackgroundTexture(renderer)
+  const handleFacesDetected = (faces) => {
 
-    const geometry = new THREE.BoxGeometry(1, 1, 1);
-    const material = new THREE.MeshBasicMaterial({ color: 0x828282 });
-    const cube = new THREE.Mesh(geometry, material);
-    scene.add(cube)
-    camera.position.z = 5;
+    setHasFaceInFrame(() => faces.faces.length >= 1)
+    if (faces.faces.length < 1) return
 
-    const animate = () => {
-      requestAnimationFrame(animate);
-      renderer.render(scene, camera);
-      gl.endFrameEXP();
-      cube.rotation.x += 0.07;
-      cube.rotation.y += 0.04;
-    }
+    Animated.timing(transX, {
+      useNativeDriver: true,
+      toValue: faces.faces[0].bounds.origin.x,
+    }).start();
 
-    animate();
+    Animated.timing(transY, {
+      useNativeDriver: true,
+      toValue: faces.faces[0].bounds.origin.y,
+    }).start()
+
+    setBoxSize({
+      height: faces.faces[0].bounds.size.height,
+      width: faces.faces[0].bounds.size.width
+    })
   }
-  render() {
-    return (
-      <React.Fragment>
 
-        <GLView
-          style={{ flex: 1 }}
-          ref={(ref) => this._glView = ref}
-          onContextCreate={this._onGLContextCreate}
-        />
 
-      </React.Fragment >
-    )
-  }
+  return (
+    <Camera style={{ flex: 1 }} zoom={0} type={type}
+      onFacesDetected={handleFacesDetected}
+      faceDetectorSettings={{
+        mode: FaceDetector.Constants.Mode.accurate,
+        detectLandmarks: FaceDetector.Constants.Landmarks.none,
+        runClassifications: FaceDetector.Constants.Classifications.none,
+        minDetectionInterval: 100,
+        tracking: true,
+      }}
+    >
+      {hasFaceInFrame && <Animated.View style={{
+        position: 'absolute',
+        width: boxSize.width,
+        height: boxSize.height,
+        borderWidth: 2,
+        borderRadius: 6,
+        borderColor: 'green',
+        transform: [
+          {
+            translateX: transX,
+          },
+          {
+            translateY: transY,
+          }
+        ],
+
+      }} />}
+
+
+      <SafeAreaView style={{ flex: 1 }}>
+        {hasFaceInFrame && <Text style={{ position: 'absolute', bottom: '20%', left: '30%', fontSize: 20, color: 'red' }}>Face Detected</Text>}
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'transparent',
+            flexDirection: 'row',
+          }}>
+          <TouchableOpacity
+            style={{
+              alignSelf: 'flex-start',
+              alignItems: 'center',
+            }}
+            onPress={() => {
+              setType(
+                type === Camera.Constants.Type.back
+                  ? Camera.Constants.Type.front
+                  : Camera.Constants.Type.back
+              );
+            }}>
+            <Text style={{ fontSize: 18, marginBottom: 10, color: 'red', marginLeft: 10, fontWeight: 'bold' }}> Flip Camera </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </Camera>
+  );
 }
-
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btn: {
-    padding: 5,
-    backgroundColor: Platform.OS === 'ios' ? 'red' : 'blue',
-    color: '#fff',
-    borderRadius: 5,
-  }
-});
